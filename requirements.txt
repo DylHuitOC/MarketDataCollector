@@ -2,3 +2,10 @@ requests
 mysql-connector-python
 pandas
 python-dotenv
+schedule
+sqlalchemy
+pytz
+logging
+pyyaml
+aiohttp
+asyncio
