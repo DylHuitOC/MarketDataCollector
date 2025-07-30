@@ -9,26 +9,83 @@ from datetime import datetime, timedelta
 
 from elt_orchestrator import ELTOrchestrator
 from extract.market_data_extractor import MarketDataExtractor
-from load.data_warehouse_loader import DataWarehouseLoader
-from transform.analytics_transformer import AnalyticsTransformer
+from load.csv_data_warehouse_loader import CSVDataWarehouseLoader
+from transform.raw_to_analytics_transformer import RawToAnalyticsTransformer
 from quality.data_quality_checker import DataQualityChecker
 from reporting.weekly_reporter import WeeklyReporter
 from utils import setup_logging
 
 def run_extraction():
-    """Run data extraction only"""
+    """Run data extraction to CSV only"""
     logger = setup_logging('elt_runner')
-    logger.info("Running extraction process...")
+    logger.info("Running CSV extraction process...")
     
     extractor = MarketDataExtractor()
     extracted_data = extractor.extract_all_current_data()
     
-    if extracted_data:
-        loader = DataWarehouseLoader()
-        result = loader.load_extracted_data(extracted_data)
-        logger.info(f"Extraction completed. Results: {result}")
+    if extracted_data and not extracted_data.get('error'):
+        csv_files = extracted_data.get('csv_files', {})
+        logger.info(f"Extraction completed. CSV files created: {list(csv_files.keys())}")
+        return csv_files
     else:
-        logger.warning("No data extracted")
+        logger.warning("No data extracted or extraction failed")
+        return None
+
+def run_csv_loading(csv_files=None):
+    """Load CSV files into raw data warehouse"""
+    logger = setup_logging('elt_runner')
+    logger.info("Running CSV to raw data warehouse loading...")
+    
+    csv_loader = CSVDataWarehouseLoader()
+    
+    if csv_files:
+        # Load specific CSV files
+        result = csv_loader.load_csv_files(csv_files)
+    else:
+        # Load all CSV files in directory
+        result = csv_loader.load_all_csv_files_in_directory()
+    
+    logger.info(f"CSV loading completed. Results: {result}")
+    return result
+
+def run_transformation():
+    """Transform data from raw DW to analytics DW"""
+    logger = setup_logging('elt_runner')
+    logger.info("Running raw to analytics transformation...")
+    
+    transformer = RawToAnalyticsTransformer()
+    result = transformer.transform_all_data(lookback_days=1)
+    
+    logger.info(f"Transformation completed. Results: {result}")
+    return result
+
+def run_full_elt():
+    """Run complete ELT process: CSV extraction → DW1 loading → DW2 transformation"""
+    logger = setup_logging('elt_runner')
+    logger.info("Running full CSV → DW1 → DW2 ELT process...")
+    
+    # Step 1: Extract to CSV
+    csv_files = run_extraction()
+    if not csv_files:
+        logger.error("CSV extraction failed, stopping ELT process")
+        return
+    
+    # Step 2: Load CSV to raw DW
+    load_result = run_csv_loading(csv_files)
+    if load_result.get('error'):
+        logger.error(f"CSV loading failed: {load_result['error']}")
+        return
+    
+    # Step 3: Transform to analytics DW
+    transform_result = run_transformation()
+    if transform_result.get('error'):
+        logger.error(f"Transformation failed: {transform_result['error']}")
+        return
+    
+    # Step 4: Quality checks
+    run_quality_check()
+    
+    logger.info("Full ELT process completed successfully")
 
 def run_backfill(start_date_str, end_date_str):
     """Run historical data backfill"""
@@ -38,16 +95,12 @@ def run_backfill(start_date_str, end_date_str):
     start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
     end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
     
-    orchestrator = ELTOrchestrator()
-    orchestrator.backfill_missing_data(start_date, end_date)
+    # Note: Backfill would need to be implemented in the extractor for CSV workflow
+    logger.warning("Backfill not yet implemented for CSV workflow")
 
 def run_transforms():
-    """Run analytics transformations"""
-    logger = setup_logging('elt_runner')
-    logger.info("Running transformations...")
-    
-    transformer = AnalyticsTransformer()
-    transformer.run_incremental_transforms()
+    """Run analytics transformations (legacy method name)"""
+    return run_transformation()
     logger.info("Transformations completed")
 
 def run_quality_check():
@@ -72,15 +125,6 @@ def run_quality_check():
             status = 'PASS' if result['passed'] else 'FAIL'
             print(f"  {check_name}: {status} - {result['message']}")
 
-def run_full_elt():
-    """Run complete ELT process once"""
-    logger = setup_logging('elt_runner')
-    logger.info("Running full ELT process...")
-    
-    orchestrator = ELTOrchestrator()
-    orchestrator.extract_load_transform()
-    logger.info("Full ELT process completed")
-
 def run_weekly_report():
     """Generate weekly report"""
     logger = setup_logging('elt_runner')
@@ -101,7 +145,7 @@ def run_scheduler():
 def main():
     parser = argparse.ArgumentParser(description='ELT Process Runner')
     parser.add_argument('command', choices=[
-        'extract', 'backfill', 'transform', 'quality', 'full', 'report', 'schedule'
+        'extract', 'csv-load', 'transform', 'quality', 'full', 'report', 'schedule'
     ], help='Command to run')
     parser.add_argument('--start-date', help='Start date for backfill (YYYY-MM-DD)')
     parser.add_argument('--end-date', help='End date for backfill (YYYY-MM-DD)')
@@ -111,13 +155,10 @@ def main():
     try:
         if args.command == 'extract':
             run_extraction()
-        elif args.command == 'backfill':
-            if not args.start_date or not args.end_date:
-                print("Backfill requires --start-date and --end-date")
-                sys.exit(1)
-            run_backfill(args.start_date, args.end_date)
+        elif args.command == 'csv-load':
+            run_csv_loading()
         elif args.command == 'transform':
-            run_transforms()
+            run_transformation()
         elif args.command == 'quality':
             run_quality_check()
         elif args.command == 'full':

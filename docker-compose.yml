@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: market_data_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: marketdata123
+      MYSQL_DATABASE: market_data_warehouse
+      MYSQL_USER: market_user
+      MYSQL_PASSWORD: market_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+
+volumes:
+  mysql_data:

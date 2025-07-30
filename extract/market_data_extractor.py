@@ -1,6 +1,7 @@
 """
 Market Data Extractor
 Handles extraction of real-time and historical market data from FMP API
+Saves data as CSV files before loading into data warehouse
 """
 
 import requests
@@ -9,6 +10,7 @@ from datetime import datetime, timedelta
 import asyncio
 import aiohttp
 import time
+import os
 from typing import Dict, List, Optional, Any
 import json
 
@@ -22,29 +24,61 @@ class MarketDataExtractor:
         self.session = requests.Session()
         self.session.headers.update({'User-Agent': 'MarketDataCollector/1.0'})
         
+        # Create CSV output directories
+        self.csv_base_dir = 'data_extracts'
+        self._ensure_csv_directories()
+        
+    def _ensure_csv_directories(self):
+        """Create CSV output directories if they don't exist"""
+        directories = [
+            f'{self.csv_base_dir}/stocks',
+            f'{self.csv_base_dir}/indexes', 
+            f'{self.csv_base_dir}/commodities',
+            f'{self.csv_base_dir}/bonds',
+            f'{self.csv_base_dir}/archive'
+        ]
+        
+        for directory in directories:
+            os.makedirs(directory, exist_ok=True)
+    
     def extract_all_current_data(self) -> Dict[str, Any]:
-        """Extract current market data for all symbols"""
+        """Extract current market data for all symbols and save as CSV"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
         extracted_data = {
             'stocks': {},
             'indexes': {},
             'commodities': {},
             'bonds': {},
             'extraction_time': datetime.now(),
-            'metadata': {}
+            'metadata': {},
+            'csv_files': {}  # Track generated CSV files
         }
         
         try:
             # Extract stock data
             self.logger.info(f"Extracting data for {len(STOCK_SYMBOLS)} stocks")
+            stocks_data = []
             for symbol in STOCK_SYMBOLS:
                 if validate_symbol(symbol):
                     data = self._extract_symbol_data(symbol, '15min')
                     if data:
                         extracted_data['stocks'][symbol] = data
+                        # Add symbol to each record for CSV
+                        for record in data:
+                            record['symbol'] = symbol
+                        stocks_data.extend(data)
                     time.sleep(0.1)  # Rate limiting
+            
+            # Save stocks CSV
+            if stocks_data:
+                csv_file = f'{self.csv_base_dir}/stocks/stocks_{timestamp}.csv'
+                self._save_to_csv(stocks_data, csv_file)
+                extracted_data['csv_files']['stocks'] = csv_file
                         
             # Extract index data (use 5min and aggregate to 15min)
             self.logger.info(f"Extracting data for {len(INDEX_SYMBOLS)} indexes")
+            indexes_data = []
             for symbol in INDEX_SYMBOLS:
                 if validate_symbol(symbol):
                     data = self._extract_symbol_data(symbol, '5min')
@@ -52,29 +86,79 @@ class MarketDataExtractor:
                         # Aggregate 5min to 15min
                         aggregated_data = self._aggregate_5min_to_15min(data)
                         extracted_data['indexes'][symbol] = aggregated_data
+                        # Add symbol to each record for CSV
+                        for record in aggregated_data:
+                            record['symbol'] = symbol
+                        indexes_data.extend(aggregated_data)
                     time.sleep(0.1)
+            
+            # Save indexes CSV
+            if indexes_data:
+                csv_file = f'{self.csv_base_dir}/indexes/indexes_{timestamp}.csv'
+                self._save_to_csv(indexes_data, csv_file)
+                extracted_data['csv_files']['indexes'] = csv_file
                         
             # Extract commodity data
             self.logger.info(f"Extracting data for {len(COMMODITY_SYMBOLS)} commodities")
+            commodities_data = []
             for symbol in COMMODITY_SYMBOLS:
                 if validate_symbol(symbol):
                     data = self._extract_symbol_data(symbol, '15min')
                     if data:
                         extracted_data['commodities'][symbol] = data
+                        # Add symbol to each record for CSV
+                        for record in data:
+                            record['symbol'] = symbol
+                        commodities_data.extend(data)
                     time.sleep(0.1)
+            
+            # Save commodities CSV
+            if commodities_data:
+                csv_file = f'{self.csv_base_dir}/commodities/commodities_{timestamp}.csv'
+                self._save_to_csv(commodities_data, csv_file)
+                extracted_data['csv_files']['commodities'] = csv_file
                         
             # Extract bond data
             bond_data = self._extract_treasury_rates()
             if bond_data:
                 extracted_data['bonds'] = bond_data
+                # Save bonds CSV
+                csv_file = f'{self.csv_base_dir}/bonds/bonds_{timestamp}.csv'
+                self._save_to_csv([bond_data], csv_file)
+                extracted_data['csv_files']['bonds'] = csv_file
                 
             # Add metadata
             extracted_data['metadata'] = self._generate_extraction_metadata(extracted_data)
+            
+            self.logger.info(f"Data extraction completed. CSV files saved to {self.csv_base_dir}/")
             
         except Exception as e:
             self.logger.error(f"Error in extract_all_current_data: {str(e)}")
             
         return extracted_data
+    
+    def _save_to_csv(self, data: List[Dict], file_path: str):
+        """Save data to CSV file"""
+        try:
+            if not data:
+                self.logger.warning(f"No data to save to {file_path}")
+                return
+                
+            df = pd.DataFrame(data)
+            
+            # Ensure proper column order for OHLCV data
+            if 'symbol' in df.columns:
+                column_order = ['symbol', 'date', 'open', 'high', 'low', 'close', 'volume']
+                # Add any additional columns that might exist
+                additional_cols = [col for col in df.columns if col not in column_order]
+                column_order.extend(additional_cols)
+                df = df.reindex(columns=[col for col in column_order if col in df.columns])
+            
+            df.to_csv(file_path, index=False)
+            self.logger.info(f"Saved {len(data)} records to {file_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving CSV file {file_path}: {str(e)}")
     
     def extract_historical_data(self, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
         """Extract historical data for backfill operations"""

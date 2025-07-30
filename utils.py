@@ -1,7 +1,8 @@
 import mysql.connector
 import logging
 import pytz
-from datetime import datetime, timedelta, time
+import time
+from datetime import datetime, timedelta, time as dt_time
 from config import DB_CONFIG, ELT_CONFIG, MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE, MARKET_CLOSE_HOUR, MARKET_CLOSE_MINUTE
 import os
 
@@ -67,8 +68,8 @@ def is_market_open(check_time=None):
         return False
     
     # Check if it's within market hours
-    market_open = time(MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE)
-    market_close = time(MARKET_CLOSE_HOUR, MARKET_CLOSE_MINUTE)
+    market_open = dt_time(MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE)
+    market_close = dt_time(MARKET_CLOSE_HOUR, MARKET_CLOSE_MINUTE)
     
     current_time = eastern_time.time()
     return market_open <= current_time <= market_close
