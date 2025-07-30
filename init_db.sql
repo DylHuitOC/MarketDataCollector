@@ -38,3 +38,95 @@ CREATE TABLE IF NOT EXISTS data_quality_log (
 );
 
 SELECT 'Database initialized successfully' as result;
+
+-- Raw data tables
+CREATE TABLE IF NOT EXISTS stock_data_raw (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(16),
+    datetime DATETIME,
+    date DATE,
+    open DECIMAL(18,6),
+    high DECIMAL(18,6),
+    low DECIMAL(18,6),
+    close DECIMAL(18,6),
+    volume BIGINT,
+    loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS index_data_raw (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(16),
+    datetime DATETIME,
+    date DATE,
+    open DECIMAL(18,6),
+    high DECIMAL(18,6),
+    low DECIMAL(18,6),
+    close DECIMAL(18,6),
+    volume BIGINT,
+    loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS commodity_data_raw (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(16),
+    datetime DATETIME,
+    date DATE,
+    open DECIMAL(18,6),
+    high DECIMAL(18,6),
+    low DECIMAL(18,6),
+    close DECIMAL(18,6),
+    volume BIGINT,
+    loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bond_data_raw (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(16),
+    datetime DATETIME,
+    date DATE,
+    open DECIMAL(18,6),
+    high DECIMAL(18,6),
+    low DECIMAL(18,6),
+    close DECIMAL(18,6),
+    volume BIGINT,
+    loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Staging tables
+CREATE TABLE IF NOT EXISTS stock_data_staging LIKE stock_data_raw;
+CREATE TABLE IF NOT EXISTS index_data_staging LIKE index_data_raw;
+CREATE TABLE IF NOT EXISTS commodity_data_staging LIKE commodity_data_raw;
+CREATE TABLE IF NOT EXISTS bond_data_staging LIKE bond_data_raw;
+
+-- Production tables
+CREATE TABLE IF NOT EXISTS stock_data LIKE stock_data_raw;
+CREATE TABLE IF NOT EXISTS index_data LIKE index_data_raw;
+CREATE TABLE IF NOT EXISTS commodity_data LIKE commodity_data_raw;
+CREATE TABLE IF NOT EXISTS bond_data LIKE bond_data_raw;
+
+-- Analytics tables
+CREATE TABLE IF NOT EXISTS technical_indicators (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(16),
+    datetime DATETIME,
+    indicator_name VARCHAR(32),
+    value DECIMAL(18,6)
+);
+
+CREATE TABLE IF NOT EXISTS daily_aggregates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(16),
+    date DATE,
+    open DECIMAL(18,6),
+    high DECIMAL(18,6),
+    low DECIMAL(18,6),
+    close DECIMAL(18,6),
+    volume BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS market_summary (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    date DATE,
+    market VARCHAR(32),
+    summary JSON
+);

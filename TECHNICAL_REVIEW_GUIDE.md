@@ -80,26 +80,26 @@ Show the modular structure and explain the CSV → DW1 → DW2 workflow
 ### 2. Live Demo (10 minutes)
 ```bash
 # Start the system
-./start_database.sh
-./setup_database.sh
+./scripts/start_database.sh
+./scripts/setup_database.sh
 
 # Extract current market data
-./run_elt_ops.sh -c extract
+./scripts/run_elt_ops.sh -c extract
 
 # Show CSV files generated
 ls -la data_extracts/*/
 
 # Load into raw warehouse
-./run_elt_ops.sh -c csv-load
+./scripts/run_elt_ops.sh -c csv-load
 
 # Transform to analytics
-./run_elt_ops.sh -c transform
+./scripts/run_elt_ops.sh -c transform
 
 # Run quality checks
-./run_elt_ops.sh -c quality
+./scripts/run_elt_ops.sh -c quality
 
 # Full pipeline
-./run_elt_ops.sh -c full
+./scripts/run_elt_ops.sh -c full
 ```
 
 ### 3. Database Review (5 minutes)

@@ -44,11 +44,12 @@ Windows Scripts:
 └── run_elt_ops.ps1               # NEW: Run individual operations
 
 Linux Scripts:
-├── setup_elt.sh                   # NEW: Linux equivalent setup
-├── start_database.sh              # NEW: Linux database startup
-├── setup_database.sh              # NEW: Linux table initialization
-├── start_elt.sh                   # NEW: Linux ELT scheduler
-└── run_elt_ops.sh                # NEW: Linux operations runner
+├── scripts/setup_elt.sh                   # NEW: Linux equivalent setup
+├── scripts/start_database_simple.sh             # NEW: Simple MySQL startup
+├── scripts/start_database.sh              # NEW: Linux database startup
+├── scripts/setup_database.sh              # NEW: Linux table initialization
+├── scripts/start_elt.sh                   # NEW: Linux ELT scheduler
+└── scripts/run_elt_ops.sh                # NEW: Linux operations runner
 ```
 
 ### Documentation & Guides
@@ -126,23 +127,23 @@ run_elt.py                        # Enhanced with new command options
 ### Quick Start (Recommended)
 ```bash
 # 1. Start database
-./start_database.sh
+./scripts/start_database.sh
 
 # 2. Initialize tables
-./setup_database.sh
+./scripts/setup_database.sh
 
 # 3. Start ELT scheduler
-./start_elt.sh
+./scripts/start_elt.sh
 ```
 
 ### Manual Operations
 ```bash
 # Individual operations
-./run_elt_ops.sh -c extract     # CSV extraction only
-./run_elt_ops.sh -c csv-load    # Load CSV to raw DW
-./run_elt_ops.sh -c transform   # Transform to analytics DW
-./run_elt_ops.sh -c quality     # Data quality checks
-./run_elt_ops.sh -c full        # Complete pipeline
+./scripts/run_elt_ops.sh -c extract     # CSV extraction only
+./scripts/run_elt_ops.sh -c csv-load    # Load CSV to raw DW
+./scripts/run_elt_ops.sh -c transform   # Transform to analytics DW
+./scripts/run_elt_ops.sh -c quality     # Data quality checks
+./scripts/run_elt_ops.sh -c full        # Complete pipeline
 ```
 
 ## Next Steps for Production

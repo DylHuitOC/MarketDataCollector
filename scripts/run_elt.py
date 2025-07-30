@@ -4,6 +4,8 @@ Simple script to run different ELT operations
 """
 
 import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import argparse
 from datetime import datetime, timedelta
 

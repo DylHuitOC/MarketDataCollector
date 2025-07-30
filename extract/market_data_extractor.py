@@ -363,9 +363,18 @@ class MarketDataExtractor:
         return True
     
     def _clean_record(self, record: Dict) -> Dict:
-        """Clean and normalize a data record"""
+        """Clean and normalize a data record, normalizing keys to lowercase and ensuring both 'datetime' and 'date' fields are set"""
+        # Normalize keys to lowercase for compatibility
+        record = {k.lower(): v for k, v in record.items()}
+        # Use the API's date field as the full timestamp for 'datetime', and extract the date part for 'date'
+        dt_val = record['date']
+        if dt_val:
+            date_val = dt_val[:10]  # YYYY-MM-DD
+        else:
+            date_val = None
         return {
-            'date': record['date'],
+            'datetime': dt_val,
+            'date': date_val,
             'open': round(safe_float(record['open']), 4),
             'high': round(safe_float(record['high']), 4),
             'low': round(safe_float(record['low']), 4),

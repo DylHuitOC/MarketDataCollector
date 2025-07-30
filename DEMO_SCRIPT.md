@@ -3,10 +3,10 @@
 ## Pre-Demo Setup (Do this beforehand)
 ```bash
 # Ensure database is running
-./start_database.sh
+./scripts/start_database.sh
 
 # Initialize tables if not done
-./setup_database.sh
+./scripts/setup_database.sh
 
 # Verify API key is set in .env
 cat .env | grep API_KEY
@@ -38,7 +38,7 @@ Open `TECHNICAL_REVIEW_GUIDE.md` and explain:
 ```bash
 # Extract current market data
 echo "Extracting real-time market data..."
-./run_elt_ops.sh -c extract
+./scripts/run_elt_ops.sh -c extract
 
 # Show generated CSV files
 echo "Data extracted to CSV files:"
@@ -55,11 +55,11 @@ head -5 data_extracts/stocks/*.csv
 ```bash
 # Load CSV to raw warehouse
 echo "Loading to raw data warehouse (DW1)..."
-./run_elt_ops.sh -c csv-load
+./scripts/run_elt_ops.sh -c csv-load
 
 # Transform to analytics warehouse
 echo "Transforming to analytics warehouse (DW2)..."
-./run_elt_ops.sh -c transform
+./scripts/run_elt_ops.sh -c transform
 ```
 
 ### 5. Analytics Showcase (4 minutes)
@@ -97,7 +97,7 @@ exit
 ```bash
 # Run quality checks
 echo "Running data quality checks..."
-./run_elt_ops.sh -c quality
+./scripts/run_elt_ops.sh -c quality
 
 # Show logs
 echo "System logs:"
@@ -111,7 +111,7 @@ tail -10 logs/elt_*.log
 ```bash
 # Run complete ELT pipeline
 echo "Running full ELT pipeline..."
-./run_elt_ops.sh -c full
+./scripts/run_elt_ops.sh -c full
 ```
 
 ### 8. Production Features (1 minute)

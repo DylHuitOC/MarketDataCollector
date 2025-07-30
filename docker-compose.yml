@@ -10,12 +10,25 @@ services:
       MYSQL_USER: market_user
       MYSQL_PASSWORD: market_pass
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     command: --default-authentication-plugin=mysql_native_password
     restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: market_data_phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: market_user
+      PMA_PASSWORD: market_pass
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
 
 volumes:
   mysql_data:
