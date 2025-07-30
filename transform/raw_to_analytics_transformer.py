@@ -93,15 +93,15 @@ class RawToAnalyticsTransformer:
         """Transform OHLCV data from raw to analytics with data quality checks"""
         cursor = conn.cursor()
         
-        # Get raw data with basic validation
+        # Get raw data with basic validation - updated for new schema
         cursor.execute(f"""
-            SELECT symbol, date, open, high, low, close, volume, loaded_at
+            SELECT symbol, datetime, date, open, high, low, close, volume, loaded_at
             FROM {source_table}
             WHERE loaded_at >= %s
             AND high >= GREATEST(open, close, low)
             AND low <= LEAST(open, close, high)
             AND open > 0 AND high > 0 AND low > 0 AND close > 0
-            ORDER BY symbol, date
+            ORDER BY symbol, datetime
         """, (cutoff_date,))
         
         raw_data = cursor.fetchall()
@@ -120,10 +120,10 @@ class RawToAnalyticsTransformer:
         
         insert_sql = f"""
             INSERT INTO {target_table} 
-            (symbol, date, open, high, low, close, volume, 
+            (symbol, datetime, date, open, high, low, close, volume, 
              price_change, price_change_pct, avg_price, volatility, 
              relative_volume, data_quality_score, loaded_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON DUPLICATE KEY UPDATE
                 open=VALUES(open), high=VALUES(high), low=VALUES(low),
                 close=VALUES(close), volume=VALUES(volume),
@@ -140,7 +140,7 @@ class RawToAnalyticsTransformer:
             try:
                 # Calculate enhanced metrics for each record
                 for i, row in enumerate(symbol_data):
-                    date, open_price, high, low, close, volume = row[1:7]
+                    datetime_val, date_val, open_price, high, low, close, volume = row[1:8]
                     
                     # Calculate basic metrics
                     avg_price = (high + low + close) / 3
@@ -161,7 +161,7 @@ class RawToAnalyticsTransformer:
                     
                     # Get historical volume for relative volume calculation
                     relative_volume = self._calculate_relative_volume(
-                        cursor, symbol, source_table, volume, date
+                        cursor, symbol, source_table, volume, datetime_val
                     )
                     
                     # Calculate data quality score
@@ -171,7 +171,7 @@ class RawToAnalyticsTransformer:
                     
                     # Insert enhanced record
                     values = (
-                        symbol, date, round(open_price, 4), round(high, 4), 
+                        symbol, datetime_val, date_val, round(open_price, 4), round(high, 4), 
                         round(low, 4), round(close, 4), volume,
                         price_change, price_change_pct, round(avg_price, 4),
                         volatility, relative_volume, quality_score
@@ -187,16 +187,16 @@ class RawToAnalyticsTransformer:
         return records_inserted
     
     def _transform_bond_data(self, conn, cutoff_date: datetime) -> int:
-        """Transform bond data from raw to analytics"""
+        """Transform bond data from raw to analytics - updated for new schema"""
         cursor = conn.cursor()
         
-        # Get raw bond data
+        # Get raw bond data - updated field names
         cursor.execute("""
-            SELECT date, month1, month2, month3, month6, year1, year2, year3,
-                   year5, year7, year10, year20, year30, loaded_at
+            SELECT datetime, date, rate, yield_1m, yield_3m, yield_6m, yield_1y, 
+                   yield_2y, yield_5y, yield_10y, yield_20y, yield_30y, loaded_at
             FROM bond_data_raw
             WHERE loaded_at >= %s
-            ORDER BY date
+            ORDER BY datetime
         """, (cutoff_date,))
         
         raw_data = cursor.fetchall()
@@ -207,25 +207,27 @@ class RawToAnalyticsTransformer:
         
         insert_sql = """
             INSERT INTO bond_data
-            (date, month1, month2, month3, month6, year1, year2, year3,
-             year5, year7, year10, year20, year30, yield_curve_slope,
-             term_spread, credit_spread_proxy, loaded_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            (datetime, date, rate, yield_1m, yield_3m, yield_6m, yield_1y, 
+             yield_2y, yield_5y, yield_10y, yield_20y, yield_30y, 
+             yield_curve_slope, term_spread, credit_spread_proxy, loaded_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON DUPLICATE KEY UPDATE
-                month1=VALUES(month1), month2=VALUES(month2), month3=VALUES(month3),
-                month6=VALUES(month6), year1=VALUES(year1), year2=VALUES(year2),
-                year3=VALUES(year3), year5=VALUES(year5), year7=VALUES(year7),
-                year10=VALUES(year10), year20=VALUES(year20), year30=VALUES(year30),
-                yield_curve_slope=VALUES(yield_curve_slope), term_spread=VALUES(term_spread),
-                credit_spread_proxy=VALUES(credit_spread_proxy), loaded_at=NOW()
+                rate=VALUES(rate), yield_1m=VALUES(yield_1m), yield_3m=VALUES(yield_3m),
+                yield_6m=VALUES(yield_6m), yield_1y=VALUES(yield_1y), yield_2y=VALUES(yield_2y),
+                yield_5y=VALUES(yield_5y), yield_10y=VALUES(yield_10y), yield_20y=VALUES(yield_20y),
+                yield_30y=VALUES(yield_30y), yield_curve_slope=VALUES(yield_curve_slope), 
+                term_spread=VALUES(term_spread), credit_spread_proxy=VALUES(credit_spread_proxy), 
+                loaded_at=NOW()
         """
         
         records_inserted = 0
         
         for row in raw_data:
             try:
-                date = row[0]
-                yields = row[1:13]  # month1 through year30
+                datetime_val = row[0]
+                date_val = row[1]
+                rate = row[2]
+                yields = row[3:12]  # yield_1m through yield_30y
                 
                 # Calculate yield curve analytics
                 year2_yield = safe_float(row[6])  # year2
@@ -248,14 +250,13 @@ class RawToAnalyticsTransformer:
                     # Simple approximation based on historical spreads
                     credit_spread_proxy = round(year10_yield * 0.15, 2)
                 
-                values = list(yields) + [yield_curve_slope, term_spread, credit_spread_proxy]
-                values.insert(0, date)  # Add date at beginning
+                values = [datetime_val, date_val, rate] + list(yields) + [yield_curve_slope, term_spread, credit_spread_proxy]
                 
                 cursor.execute(insert_sql, values)
                 records_inserted += 1
                 
             except Exception as e:
-                self.logger.error(f"Error transforming bond data for {date}: {str(e)}")
+                self.logger.error(f"Error transforming bond data for {datetime_val}: {str(e)}")
         
         self.logger.info(f"Transformed {records_inserted} bond records")
         return records_inserted

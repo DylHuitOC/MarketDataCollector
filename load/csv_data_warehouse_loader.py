@@ -189,26 +189,25 @@ class CSVDataWarehouseLoader:
         """Get INSERT SQL for OHLCV data tables"""
         return f"""
             INSERT INTO {table_name} 
-            (symbol, date, open, high, low, close, volume, loaded_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            (symbol, datetime, date, open, high, low, close, volume, loaded_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON DUPLICATE KEY UPDATE
                 open=VALUES(open), high=VALUES(high), low=VALUES(low), 
                 close=VALUES(close), volume=VALUES(volume), loaded_at=NOW()
         """
     
     def _get_bond_insert_sql(self, table_name: str) -> str:
-        """Get INSERT SQL for bond data table"""
+        """Get INSERT SQL for bond data table - updated for FMP treasury API format"""
         return f"""
             INSERT INTO {table_name}
-            (date, month1, month2, month3, month6, year1, year2, year3, 
-             year5, year7, year10, year20, year30, loaded_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            (datetime, date, rate, yield_1m, yield_3m, yield_6m, yield_1y, yield_2y, 
+             yield_5y, yield_10y, yield_20y, yield_30y, loaded_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON DUPLICATE KEY UPDATE
-                month1=VALUES(month1), month2=VALUES(month2), month3=VALUES(month3),
-                month6=VALUES(month6), year1=VALUES(year1), year2=VALUES(year2),
-                year3=VALUES(year3), year5=VALUES(year5), year7=VALUES(year7),
-                year10=VALUES(year10), year20=VALUES(year20), year30=VALUES(year30),
-                loaded_at=NOW()
+                rate=VALUES(rate), yield_1m=VALUES(yield_1m), yield_3m=VALUES(yield_3m),
+                yield_6m=VALUES(yield_6m), yield_1y=VALUES(yield_1y), yield_2y=VALUES(yield_2y),
+                yield_5y=VALUES(yield_5y), yield_10y=VALUES(yield_10y), yield_20y=VALUES(yield_20y),
+                yield_30y=VALUES(yield_30y), loaded_at=NOW()
         """
     
     def _insert_batch_from_dataframe(self, cursor, df: pd.DataFrame, sql: str, table_name: str) -> Dict[str, int]:
@@ -218,26 +217,30 @@ class CSVDataWarehouseLoader:
         for _, row in df.iterrows():
             try:
                 if 'bond' in table_name:
+                    # FMP treasury API format
+                    record_datetime = pd.to_datetime(row['date']).to_pydatetime().replace(tzinfo=None)
+                    record_date = record_datetime.date()
+                    
                     values = (
-                        pd.to_datetime(row['date']).date(),
+                        record_datetime,
+                        record_date,
+                        safe_float(row.get('rate')),
                         safe_float(row.get('month1')),
-                        safe_float(row.get('month2')),
                         safe_float(row.get('month3')),
                         safe_float(row.get('month6')),
                         safe_float(row.get('year1')),
                         safe_float(row.get('year2')),
-                        safe_float(row.get('year3')),
                         safe_float(row.get('year5')),
-                        safe_float(row.get('year7')),
                         safe_float(row.get('year10')),
                         safe_float(row.get('year20')),
                         safe_float(row.get('year30'))
                     )
                 else:
-                    # OHLCV data
+                    # OHLCV data (stocks, indexes, commodities)
                     values = (
                         row['symbol'],
                         pd.to_datetime(row['date']).to_pydatetime().replace(tzinfo=None),
+                        pd.to_datetime(row['date']).date(),
                         round(safe_float(row['open']), 4),
                         round(safe_float(row['high']), 4),
                         round(safe_float(row['low']), 4),
@@ -280,14 +283,15 @@ class CSVDataWarehouseLoader:
                         CREATE TABLE IF NOT EXISTS stock_data_raw (
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             symbol VARCHAR(10) NOT NULL,
-                            date DATETIME NOT NULL,
+                            datetime DATETIME NOT NULL,
+                            date DATE NOT NULL,
                             open DECIMAL(12, 4) NOT NULL,
                             high DECIMAL(12, 4) NOT NULL,
                             low DECIMAL(12, 4) NOT NULL,
                             close DECIMAL(12, 4) NOT NULL,
                             volume BIGINT NOT NULL,
                             loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            UNIQUE KEY unique_symbol_date (symbol, date),
+                            UNIQUE KEY unique_symbol_datetime (symbol, datetime),
                             INDEX idx_symbol (symbol),
                             INDEX idx_date (date),
                             INDEX idx_loaded_at (loaded_at)
@@ -297,14 +301,15 @@ class CSVDataWarehouseLoader:
                         CREATE TABLE IF NOT EXISTS index_data_raw (
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             symbol VARCHAR(10) NOT NULL,
-                            date DATETIME NOT NULL,
+                            datetime DATETIME NOT NULL,
+                            date DATE NOT NULL,
                             open DECIMAL(12, 4) NOT NULL,
                             high DECIMAL(12, 4) NOT NULL,
                             low DECIMAL(12, 4) NOT NULL,
                             close DECIMAL(12, 4) NOT NULL,
                             volume BIGINT NOT NULL,
                             loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            UNIQUE KEY unique_symbol_date (symbol, date),
+                            UNIQUE KEY unique_symbol_datetime (symbol, datetime),
                             INDEX idx_symbol (symbol),
                             INDEX idx_date (date),
                             INDEX idx_loaded_at (loaded_at)
@@ -314,7 +319,8 @@ class CSVDataWarehouseLoader:
                         CREATE TABLE IF NOT EXISTS commodity_data_raw (
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             symbol VARCHAR(50) NOT NULL,
-                            date DATETIME NOT NULL,
+                            datetime DATETIME NOT NULL,
+                            date DATE NOT NULL,
                             open DECIMAL(12, 4) NOT NULL,
                             high DECIMAL(12, 4) NOT NULL,
                             low DECIMAL(12, 4) NOT NULL,
