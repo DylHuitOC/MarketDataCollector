@@ -17,42 +17,38 @@ class StockExtractor:
         
         self.api_url = 'https://financialmodelingprep.com/stable/historical-chart/15min?symbol={}&from={}&to={}&apikey={}'
     
-    def extract_current_data(self, symbols=None):
-        """Extract current 15-minute stock data"""
+    def extract_current_data(self, symbols=None, start_date=None, end_date=None):
+        """Extract current 15-minute stock data (optionally for a custom time window)"""
         if symbols is None:
             symbols = STOCK_SYMBOLS
-        
+        if start_date is None or end_date is None:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(minutes=15)
         stock_data = {}
-        
-        self.logger.info(f"Extracting data for {len(symbols)} stocks")
-        
+        self.logger.info(f"Extracting data for {len(symbols)} stocks from {start_date} to {end_date}")
         for symbol in symbols:
             try:
-                # Get last 2 hours of data
-                end_date = datetime.now()
-                start_date = end_date - timedelta(hours=2)
-                
                 url = self.api_url.format(
-                    symbol, 
-                    start_date.strftime('%Y-%m-%d %H:%M:%S'), 
-                    end_date.strftime('%Y-%m-%d %H:%M:%S'), 
+                    symbol,
+                    start_date.strftime('%Y-%m-%d %H:%M:%S'),
+                    end_date.strftime('%Y-%m-%d %H:%M:%S'),
                     API_KEY
                 )
-                
                 response = requests.get(url)
                 if response.status_code == 200:
                     data = response.json()
                     if data:
-                        stock_data[symbol] = data
-                        self.logger.info(f"[SUCCESS] {symbol}: {len(data)} records")
+                        # Keep only the latest record by date
+                        latest_record = max(data, key=lambda x: x['date'])
+                        stock_data[symbol] = [latest_record]
+                        self.logger.info(f"[SUCCESS] {symbol}: 1 record (latest interval)")
+                    else:
+                        self.logger.info(f"[SUCCESS] {symbol}: 0 records")
                 else:
                     self.logger.warning(f"[ERROR] {symbol}: API error {response.status_code}")
-                
                 time.sleep(0.1)  # Rate limiting
-                
             except Exception as e:
                 self.logger.error(f"[ERROR] Error fetching {symbol}: {e}")
-        
         return stock_data
     
     def extract_historical_data(self, symbols, start_date, end_date):

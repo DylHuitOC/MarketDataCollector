@@ -44,9 +44,9 @@ REAL_TIME_ENABLED = os.getenv('REAL_TIME_ENABLED', 'true').lower() == 'true'
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
 
 # Symbols
-STOCK_SYMBOLS = ['AAPL', 'AMD', 'AMZN', 'BA', 'BABA', 'BAC', 'C', 'CSCO', 'CVX', 'DIS', 'F', 'GE',
-          'GOOGL', 'IBM', 'INTC', 'JNJ', 'JPM', 'KO', 'MCD', 'META', 'MSFT', 'NFLX', 'NVDA',
-          'PFE', 'T', 'TSLA', 'VZ', 'WMT', 'XOM']
+STOCK_SYMBOLS = ['AAPL']#, 'AMD', 'AMZN', 'BA', 'BABA', 'BAC', 'C', 'CSCO', 'CVX', 'DIS', 'F', 'GE',
+#          'GOOGL', 'IBM', 'INTC', 'JNJ', 'JPM', 'KO', 'MCD', 'META', 'MSFT', 'NFLX', 'NVDA',
+#          'PFE', 'T', 'TSLA', 'VZ', 'WMT', 'XOM']
 INDEX_SYMBOLS = ['^GSPC', '^DJI', '^IXIC']  # S&P 500, Dow Jones, Nasdaq
 COMMODITY_SYMBOLS = ['GCUSD', 'CLUSD']  # Gold, Oil
 
