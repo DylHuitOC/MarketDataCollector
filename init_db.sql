@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS commodity_data (
     INDEX idx_symbol_datetime (symbol, datetime),
     INDEX idx_datetime (datetime)
 );
-
+/*
 -- =============================================================
 -- DATA WAREHOUSE STAR SCHEMA EXTENSION (NEW LAYER)
 -- Keeps legacy operational tables above intact.
@@ -312,3 +312,4 @@ INSERT IGNORE INTO dim_time_interval (minutes, label) VALUES
 -- Example (symbol seed): INSERT IGNORE INTO dim_symbol(symbol, asset_type) SELECT DISTINCT symbol,'STOCK' FROM stock_data;
 -- Example (calendar seed): generate rows for needed date span via a numbers table or recursive CTE.
 
+*/
