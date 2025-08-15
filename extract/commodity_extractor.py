@@ -88,7 +88,8 @@ class CommodityExtractor:
                         API_KEY
                     )
                     
-                    self.logger.info(f" {symbol}: {current_start.date()} → {current_end.date()}")
+                    # Use ASCII arrow to avoid Windows console Unicode issues
+                    self.logger.info(f" {symbol}: {current_start.date()} -> {current_end.date()}")
                     
                     response = requests.get(url)
                     if response.status_code == 200:

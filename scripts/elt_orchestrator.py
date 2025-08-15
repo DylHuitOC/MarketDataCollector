@@ -39,55 +39,53 @@ class ELTOrchestrator:
         self.stop_event.set()
         
     def extract_load_transform(self):
-        """Main ELT process with CSV → DW1 → DW2 workflow - runs every 15 minutes during market hours"""
+        """Main ELT process with CSV -> DW1 -> DW2 workflow - runs every 15 minutes during market hours"""
         if not is_market_open():
             self.logger.info("Market is closed. Skipping extraction.")
             return
-            
+
         try:
             self.logger.info("Starting ELT process with CSV workflow...")
             start_time = datetime.now()
-            
+
             # Phase 1: Extract data from FMP API and save as CSV
             self.logger.info("Phase 1: Extracting market data to CSV files...")
             extracted_data = self.extractor.extract_all_current_data()
-            
+
             if not extracted_data or extracted_data.get('error'):
                 self.logger.warning("CSV extraction failed or no data extracted. Skipping subsequent phases.")
                 return
-            
+
             # Verify CSV files were created
             csv_files = extracted_data.get('csv_files', {})
             if not csv_files:
                 self.logger.warning("No CSV files were generated. Skipping load and transform phases.")
                 return
-                
+
             # Phase 2: Load CSV data into raw data warehouse (DW1)
             self.logger.info("Phase 2: Loading CSV data to raw data warehouse (DW1)...")
             csv_load_results = self.csv_loader.load_csv_files(csv_files)
-            
             if csv_load_results.get('error'):
                 self.logger.error(f"CSV loading failed: {csv_load_results['error']}")
                 return
-            
+
             # Phase 3: Transform data from DW1 to analytics warehouse (DW2)
             self.logger.info("Phase 3: Transforming data from DW1 to analytics warehouse (DW2)...")
             transform_results = self.transformer.transform_all_data(lookback_days=1)
-            
             if transform_results.get('error'):
                 self.logger.error(f"Transformation failed: {transform_results['error']}")
                 return
-            
+
             # Phase 4: Run data quality checks
             self.logger.info("Phase 4: Running data quality checks...")
             quality_results = self.quality_checker.run_all_checks()
-            
+
             duration = (datetime.now() - start_time).total_seconds()
-            
+
             # Log summary statistics
             total_csv_records = sum(
-                result.get('records_loaded', 0) 
-                for result in csv_load_results.values() 
+                result.get('records_loaded', 0)
+                for result in csv_load_results.values()
                 if isinstance(result, dict)
             )
             total_analytics_records = (
@@ -95,15 +93,15 @@ class ELTOrchestrator:
                 transform_results.get('indexes_transformed', 0) +
                 transform_results.get('commodities_transformed', 0)
             )
-            
+
             self.logger.info(
                 f"ELT process completed in {duration:.2f} seconds. "
-                f"Processed {total_csv_records} CSV records → {total_analytics_records} analytics records"
+                f"Processed {total_csv_records} CSV records -> {total_analytics_records} analytics records"
             )
-            
+
             # Archive processed CSV files
             self._archive_processed_csvs(csv_files)
-            
+
         except Exception as e:
             self.logger.error(f"ELT process failed: {str(e)}")
             self.logger.error(traceback.format_exc())
@@ -158,13 +156,36 @@ class ELTOrchestrator:
                 start_date = datetime.now() - timedelta(days=ELT_CONFIG['lookback_days'])
             if not end_date:
                 end_date = datetime.now()
-                
-            self.logger.info(f"Starting backfill from {start_date} to {end_date}")
-            
-            backfill_data = self.extractor.extract_historical_data(start_date, end_date)
-            if backfill_data:
-                self.loader.load_extracted_data(backfill_data, is_backfill=True)
-                
+
+            self.logger.info(f"Starting backfill from {start_date.date()} to {end_date.date()}")
+
+            # Extract historical data
+            historical_data = self.extractor.extract_historical_data(start_date, end_date)
+            if not historical_data:
+                self.logger.warning("No historical data extracted for backfill.")
+                return
+
+            # Save to CSVs
+            csv_files = self.extractor.save_all_to_csv(historical_data)
+            if not csv_files:
+                self.logger.warning("No CSV files produced during backfill.")
+                return
+
+            # Load CSVs into raw warehouse
+            load_results = self.csv_loader.load_csv_files(csv_files)
+            if load_results.get('error'):
+                self.logger.error(f"Backfill load failed: {load_results['error']}")
+                return
+
+            # Run transform after backfill
+            self.logger.info("Running transformations after backfill...")
+            transform_results = self.transformer.transform_all_data(lookback_days=ELT_CONFIG.get('lookback_days', 7))
+            if transform_results.get('error'):
+                self.logger.error(f"Backfill transform failed: {transform_results['error']}")
+                return
+
+            self.logger.info("Backfill completed successfully.")
+
         except Exception as e:
             self.logger.error(f"Backfill process failed: {str(e)}")
             

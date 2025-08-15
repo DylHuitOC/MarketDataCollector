@@ -62,9 +62,9 @@ def run_transformation():
     return result
 
 def run_full_elt():
-    """Run complete ELT process: CSV extraction → DW1 loading → DW2 transformation"""
+    """Run complete ELT process: CSV extraction -> DW1 loading -> DW2 transformation"""
     logger = setup_logging('elt_runner')
-    logger.info("Running full CSV → DW1 → DW2 ELT process...")
+    logger.info("Running full CSV -> DW1 -> DW2 ELT process...")
     
     # Step 1: Extract to CSV
     csv_files = run_extraction()

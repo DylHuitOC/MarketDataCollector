@@ -6,3 +6,6 @@ schedule
 pytz
 numpy
 aiohttp
+matplotlib
+seaborn
+plotly
