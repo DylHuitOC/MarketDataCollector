@@ -93,8 +93,7 @@ class ELTOrchestrator:
             total_analytics_records = (
                 transform_results.get('stocks_transformed', 0) +
                 transform_results.get('indexes_transformed', 0) +
-                transform_results.get('commodities_transformed', 0) +
-                transform_results.get('bonds_transformed', 0)
+                transform_results.get('commodities_transformed', 0)
             )
             
             self.logger.info(

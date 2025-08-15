@@ -22,11 +22,12 @@ if __name__ == "__main__":
 
     # Load to database
     loader = DataWarehouseLoader()
-    # The loader expects a dict with 'indexes' key
-    extracted_data = {'indexes': []}
+    # Build dict mapping symbol to list of records
+    index_records = {}
     for symbol, records in index_data.items():
         for record in records:
             record['symbol'] = symbol
-            extracted_data['indexes'].append(record)
-    loader.load_extracted_data(extracted_data)
-    print(f"Extracted, saved, and loaded index data for {start_date} to {end_date}.")
+        index_records[symbol] = records
+    # Load to production table
+    loader.load_extracted_data({'indexes': index_records}, index_table='index_data')
+    print(f"Extracted, saved, and loaded index data for {start_date} to {end_date} into index_data.")

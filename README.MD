@@ -1,111 +1,75 @@
-# Market Data ELT Pipeline
+## Market Data Collector (Simplified Overview)
 
-A production-ready ELT (Extract, Load, Transform) pipeline for real-time market data collection from Financial Modeling Prep API. Extracts 15-minute OHLCV data for stocks, indexes, and commodities, with automated technical analysis and data quality monitoring.
+This project pulls intraday OHLCV data from the Financial Modeling Prep (FMP) API and stores it in MySQL.
+It supports stocks, indexes, and commodities. Indexes and commodities use 5‑minute source data that we aggregate into custom 15‑minute bars (special handling: a standalone 9:30 bar, then 3×5‑min groups ending on :45 / :00 / :15 / :30). Stocks are fetched directly at 15‑minute intervals. Data is written to tables: `stock_data`, `index_data`, `commodity_data` (datetime‑based, no separate date column).
 
-## Features
-
-- **Real-time Data Collection**: 15-minute intervals during market hours
-- **Comprehensive Coverage**: Stocks, indexes, commodities, and treasury bonds
-- **Technical Analysis**: Automated calculation of indicators (SMA, EMA, MACD, RSI, Bollinger Bands)
-- **Data Quality Monitoring**: Automated validation and anomaly detection
-- **Robust Error Handling**: Retry logic, rate limiting, and graceful degradation
-- **Production Monitoring**: Logging, job tracking, and weekly reports
-
-## Quick Start
-
-### Prerequisites
-- Python 3.8+
-- MySQL 5.7+
-- Financial Modeling Prep API key
-
-### Setup
-1. Clone and navigate to the project:
-```bash
-cd MarketDataCollector
+### Core Flow
+```
+FMP API → Extractors → (optional CSV) → Loader → MySQL
 ```
 
-2. Run the setup script:
-```powershell
-.\setup_elt.ps1
+### Key Extractors
+- `extract/stock_extractor.py` (15min endpoint)  
+- `extract/index_extractor.py` (5min → custom 15min aggregation)  
+- `extract/commodity_extractor.py` (5min → custom 15min aggregation + market hours filter)  
+
+### What Gets Stored
+Each bar: symbol, datetime (bar close timestamp), open, high, low, close, volume.  
+For aggregated series (indexes, commodities) the datetime corresponds to the last 5‑min bar in the 15‑min set (e.g. 09:45, 10:00...).
+
+### Setup (Quick)
+1. Install dependencies: `pip install -r requirements.txt`  
+2. Create `.env` with at least:  
+    `API_KEY=your_fmp_key`  
+    DB connection vars (`DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`).  
+3. Initialize database (run your existing init script / container).  
+
+### Running Individual Extractions
+Stocks (recent historical example):
+```
+python scripts/run_historical_stock.py
 ```
 
-3. Configure your API key and database in `.env`:
-```env
-API_KEY=your_fmp_api_key_here
-DB_HOST=localhost
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
-DB_NAME=market_data
-REAL_TIME_ENABLED=true
+Indexes (recent historical 5→15 aggregation):
+```
+python scripts/run_historical_index_and_load.py
 ```
 
-4. Start the ELT scheduler:
-```powershell
-.\start_elt.ps1
+Commodities (recent historical 5→15 aggregation):
+```
+python scripts/run_historical_commodity.py
 ```
 
-## Usage
-
-### Manual Operations
-```powershell
-# Extract current market data
-.\run_elt_ops.ps1 -Command extract
-
-# Backfill historical data
-.\run_elt_ops.ps1 -Command backfill -StartDate 2024-01-01 -EndDate 2024-01-31
-
-# Run analytics transformations
-.\run_elt_ops.ps1 -Command transform
-
-# Check data quality
-.\run_elt_ops.ps1 -Command quality
-
-# Generate weekly report
-.\run_elt_ops.ps1 -Command report
-
-# Run complete ELT process once
-.\run_elt_ops.ps1 -Command full
+Current (single cycle) multi‑asset extraction + CSV + load (if implemented):
+```
+python scripts/run_elt.py extract
 ```
 
-### Python CLI
-```bash
-# Start scheduler (runs every 15 minutes during market hours)
-python run_elt.py schedule
-
-# Manual operations
-python run_elt.py extract
-python run_elt.py backfill --start-date 2024-01-01 --end-date 2024-01-31
-python run_elt.py transform
-python run_elt.py quality
-python run_elt.py full
-python run_elt.py report
+Scheduled loop (orchestrator):
+```
+python scripts/run_elt.py schedule
 ```
 
-## Architecture
+### Output Files
+CSV files land under `data_extracts/<asset_type>/` with timestamped filenames. They include a `symbol` column. Aggregated sets may add a helper field `last_5min_datetime` for traceability.
 
-### Data Flow
-```
-FMP API → Extractor → Staging Tables → Data Warehouse → Analytics → Reports
-```
+### Adjusting Symbols
+Edit `config.py` lists: `STOCK_SYMBOLS`, `INDEX_SYMBOLS`, `COMMODITY_SYMBOLS`. Restart any running scheduler for changes to take effect.
 
-## Configuration
+### Notes / Conventions
+- Index & commodity bars: open = first 5‑min open in set; close = last 5‑min close; high/low/volume aggregated across the 3 bars (post‑9:30).  
+- Data quality / analytics transformers exist but are optional for basic extraction.  
+- Duplicate protection uses (symbol, datetime) unique key.  
 
-### Symbols
-Edit `config.py` to modify tracked symbols:
-```python
-STOCK_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', ...]
-INDEX_SYMBOLS = ['^GSPC', '^DJI', '^IXIC']
-COMMODITY_SYMBOLS = ['GCUSD', 'CLUSD']
-```
+### Minimal Troubleshooting
+- Empty results: confirm market hours and API key.  
+- NULL datetimes: schema mismatch—reinitialize tables.  
+- Duplicate skips: expected when re‑running overlapping windows.  
 
-### ELT Settings
-```python
-ELT_CONFIG = {
-    'extract_interval_minutes': 15,
-    'batch_size': 100,
-    'max_retries': 3,
-    'retry_delay_seconds': 30,
-    'lookback_days': 7,
-    'market_timezone': 'US/Eastern'
-}
-```
+### Next Steps (Optional)
+- Add technical indicators (transform step).  
+- Add weekly reporting.  
+- Add Windows Task Scheduler entry to run the schedule command at startup.  
+
+---
+This simplified README focuses on the essentials: what it does, how aggregation works, and how to run the main extraction scripts.

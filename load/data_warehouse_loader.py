@@ -32,7 +32,11 @@ class DataWarehouseLoader:
             if conn:
                 conn.close()
     
-    def load_extracted_data(self, extracted_data: Dict[str, Any], is_backfill: bool = False) -> Dict[str, Any]:
+    def load_extracted_data(self, extracted_data: Dict[str, Any], is_backfill: bool = False,
+                            stock_table: str = 'stock_data',
+                            index_table: str = 'index_data',
+                            commodity_table: str = 'commodity_data',
+                            bond_table: str = 'bond_data') -> Dict[str, Any]:
         """Load extracted data into the data warehouse"""
         load_results = {
             'stocks': {'records_loaded': 0, 'errors': []},
@@ -49,38 +53,37 @@ class DataWarehouseLoader:
                 
                 # Load stock data
                 if 'stocks' in extracted_data:
-                    self.logger.info("Loading stock data...")
+                    self.logger.info(f"Loading stock data into {stock_table}...")
                     stock_result = self._load_ohlcv_data(
-                        cursor, extracted_data['stocks'], 'stock_data', is_backfill
+                        cursor, extracted_data['stocks'], stock_table, is_backfill
                     )
                     load_results['stocks'] = stock_result
                     
                 # Load index data
                 if 'indexes' in extracted_data:
-                    self.logger.info("Loading index data...")
+                    self.logger.info(f"Loading index data into {index_table}...")
                     index_result = self._load_ohlcv_data(
-                        cursor, extracted_data['indexes'], 'index_data', is_backfill
+                        cursor, extracted_data['indexes'], index_table, is_backfill
                     )
                     load_results['indexes'] = index_result
                     
                 # Load commodity data
                 if 'commodities' in extracted_data:
-                    self.logger.info("Loading commodity data...")
+                    self.logger.info(f"Loading commodity data into {commodity_table}...")
                     commodity_result = self._load_ohlcv_data(
-                        cursor, extracted_data['commodities'], 'commodity_data', is_backfill
+                        cursor, extracted_data['commodities'], commodity_table, is_backfill
                     )
                     load_results['commodities'] = commodity_result
                     
                 # Load bond data
                 if 'bonds' in extracted_data:
-                    self.logger.info("Loading bond data...")
+                    self.logger.info(f"Loading bond data into {bond_table}...")
                     bond_result = self._load_bond_data(cursor, extracted_data['bonds'], is_backfill)
                     load_results['bonds'] = bond_result
                     
                 # Commit all changes
                 conn.commit()
                 self.logger.info("All data loaded successfully")
-                
         except Exception as e:
             self.logger.error(f"Error loading data: {str(e)}")
             load_results['error'] = str(e)
@@ -93,93 +96,77 @@ class DataWarehouseLoader:
         result = {'records_loaded': 0, 'errors': [], 'duplicates_skipped': 0}
         
         for symbol, data_records in symbols_data.items():
-            try:
-                # Process in batches for better performance
-                for batch in batch_process(data_records, ELT_CONFIG.get('batch_size', 100)):
-                    batch_result = self._insert_ohlcv_batch(cursor, batch, symbol, table_name, is_backfill)
-                    result['records_loaded'] += batch_result['inserted']
-                    result['duplicates_skipped'] += batch_result['duplicates']
-                    
-            except Exception as e:
-                error_msg = f"Error loading {symbol} into {table_name}: {str(e)}"
-                self.logger.error(error_msg)
-                result['errors'].append(error_msg)
-                
-        return result
-    
-    def _insert_ohlcv_batch(self, cursor, batch: List[Dict], symbol: str, 
-                           table_name: str, is_backfill: bool) -> Dict[str, int]:
-        """Insert a batch of OHLCV records"""
-        result = {'inserted': 0, 'duplicates': 0}
-        
-        # Prepare the SQL based on table type
-        if table_name == 'stock_data':
-            sql = """
-                INSERT INTO stock_data (date, open, low, high, close, volume, symbol)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-            duplicate_check_sql = "SELECT COUNT(*) FROM stock_data WHERE date = %s AND symbol = %s"
-            
-        elif table_name == 'index_data':
-            sql = """
-                INSERT INTO index_data (date, symbol, open, low, high, close, volume)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    open=VALUES(open), low=VALUES(low), high=VALUES(high), 
-                    close=VALUES(close), volume=VALUES(volume)
-            """
-            duplicate_check_sql = "SELECT COUNT(*) FROM index_data WHERE date = %s AND symbol = %s"
-            
-        elif table_name == 'commodity_data':
-            sql = """
-                INSERT INTO commodity_data (date, symbol, open, low, high, close, volume)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    open=VALUES(open), low=VALUES(low), high=VALUES(high), 
-                    close=VALUES(close), volume=VALUES(volume)
-            """
-            duplicate_check_sql = "SELECT COUNT(*) FROM commodity_data WHERE date = %s AND symbol = %s"
-        
-        for record in batch:
-            try:
-                # Parse and validate the date
-                record_date = pd.to_datetime(record['date']).to_pydatetime().replace(tzinfo=None)
-                
-                # For stock_data table, check for duplicates manually (no primary key)
-                if table_name == 'stock_data':
-                    cursor.execute(duplicate_check_sql, (record_date, symbol))
-                    if cursor.fetchone()[0] > 0:
-                        if not is_backfill:  # Only skip duplicates for real-time data
-                            result['duplicates'] += 1
-                            continue
-                
-                # Prepare values based on table structure
-                if table_name == 'stock_data':
-                    values = (
-                        record_date,
-                        round(safe_float(record['open']), 2),
-                        round(safe_float(record['low']), 2),
-                        round(safe_float(record['high']), 2),
-                        round(safe_float(record['close']), 2),
-                        safe_int(record['volume']),
-                        symbol
-                    )
-                else:  # index_data or commodity_data
-                    values = (
-                        record_date,
-                        symbol,
-                        round(safe_float(record['open']), 4),
-                        round(safe_float(record['low']), 4),
-                        round(safe_float(record['high']), 4),
-                        round(safe_float(record['close']), 4),
-                        safe_int(record['volume'])
-                    )
-                
-                cursor.execute(sql, values)
-                result['inserted'] += 1
-                
-            except Exception as e:
-                self.logger.error(f"Error inserting record for {symbol} at {record.get('date', 'unknown')}: {str(e)}")
+            # Batch insert for efficiency (if batch_process is available)
+            batches = batch_process(data_records, batch_size=100) if 'batch_process' in globals() else [data_records]
+            for batch in batches:
+                for record in batch:
+                    try:
+                        # Parse and validate the date
+                        record_date = pd.to_datetime(record['date']).to_pydatetime().replace(tzinfo=None)
+                        # Set up SQL and duplicate check for each table
+                        if table_name == 'stock_data':
+                            sql = """
+                                INSERT INTO stock_data (symbol, datetime, open, high, low, close, volume)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
+                                    open=VALUES(open), high=VALUES(high), low=VALUES(low), 
+                                    close=VALUES(close), volume=VALUES(volume)
+                            """
+                            duplicate_check_sql = "SELECT COUNT(*) FROM stock_data WHERE symbol = %s AND datetime = %s"
+                            cursor.execute(duplicate_check_sql, (symbol, record_date))
+                            if cursor.fetchone()[0] > 0 and not is_backfill:
+                                result['duplicates_skipped'] += 1
+                                continue
+                            values = (
+                                symbol,
+                                record_date,
+                                round(safe_float(record['open']), 4),
+                                round(safe_float(record['high']), 4),
+                                round(safe_float(record['low']), 4),
+                                round(safe_float(record['close']), 4),
+                                safe_int(record['volume'])
+                            )
+                        elif table_name == 'index_data' or table_name == 'index_data_raw':
+                            sql = f"""
+                                INSERT INTO {table_name} (symbol, datetime, open, high, low, close, volume)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
+                                    open=VALUES(open), high=VALUES(high), low=VALUES(low), 
+                                    close=VALUES(close), volume=VALUES(volume)
+                            """
+                            values = (
+                                symbol,
+                                record_date,
+                                round(safe_float(record['open']), 4),
+                                round(safe_float(record['high']), 4),
+                                round(safe_float(record['low']), 4),
+                                round(safe_float(record['close']), 4),
+                                safe_int(record['volume'])
+                            )
+                        elif table_name == 'commodity_data':
+                            sql = """
+                                INSERT INTO commodity_data (symbol, datetime, open, high, low, close, volume)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
+                                    open=VALUES(open), high=VALUES(high), low=VALUES(low), 
+                                    close=VALUES(close), volume=VALUES(volume)
+                            """
+                            values = (
+                                symbol,
+                                record_date,
+                                round(safe_float(record['open']), 4),
+                                round(safe_float(record['high']), 4),
+                                round(safe_float(record['low']), 4),
+                                round(safe_float(record['close']), 4),
+                                safe_int(record['volume'])
+                            )
+                        else:
+                            raise ValueError(f"Unknown table name: {table_name}")
+                        cursor.execute(sql, values)
+                        result['records_loaded'] += 1
+                    except Exception as e:
+                        self.logger.error(f"Error inserting record for {symbol} at {record.get('date', 'unknown')}: {str(e)}")
+                        result['errors'].append(str(e))
                 
         return result
     
@@ -258,9 +245,9 @@ class DataWarehouseLoader:
                 
                 # Example cleanup queries - adjust based on your retention policy
                 cleanup_queries = [
-                    f"DELETE FROM stock_data WHERE date < '{cutoff_date}' AND volume = 0",
-                    f"DELETE FROM index_data WHERE date < '{cutoff_date}' AND volume = 0",
-                    f"DELETE FROM commodity_data WHERE date < '{cutoff_date}' AND volume = 0"
+                    f"DELETE FROM stock_data WHERE datetime < '{cutoff_date}' AND volume = 0",
+                    f"DELETE FROM index_data WHERE datetime < '{cutoff_date}' AND volume = 0",
+                    f"DELETE FROM commodity_data WHERE datetime < '{cutoff_date}' AND volume = 0"
                 ]
                 
                 for query in cleanup_queries:
@@ -290,9 +277,9 @@ class DataWarehouseLoader:
                 
                 # Stock data stats
                 cursor.execute("""
-                    SELECT COUNT(*), MIN(date), MAX(date) 
+                    SELECT COUNT(*), MIN(datetime), MAX(datetime) 
                     FROM stock_data 
-                    WHERE date >= %s
+                    WHERE datetime >= %s
                 """, (cutoff_time,))
                 
                 result = cursor.fetchone()
@@ -304,9 +291,9 @@ class DataWarehouseLoader:
                 
                 # Index data stats
                 cursor.execute("""
-                    SELECT COUNT(*), MIN(date), MAX(date) 
+                    SELECT COUNT(*), MIN(datetime), MAX(datetime) 
                     FROM index_data 
-                    WHERE date >= %s
+                    WHERE datetime >= %s
                 """, (cutoff_time,))
                 
                 result = cursor.fetchone()
@@ -318,9 +305,9 @@ class DataWarehouseLoader:
                 
                 # Commodity data stats
                 cursor.execute("""
-                    SELECT COUNT(*), MIN(date), MAX(date) 
+                    SELECT COUNT(*), MIN(datetime), MAX(datetime) 
                     FROM commodity_data 
-                    WHERE date >= %s
+                    WHERE datetime >= %s
                 """, (cutoff_time,))
                 
                 result = cursor.fetchone()
