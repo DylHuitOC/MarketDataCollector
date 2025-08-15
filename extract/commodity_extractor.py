@@ -99,7 +99,7 @@ class CommodityExtractor:
                             all_data.extend(filtered_5min)
                             self.logger.info(f"[SUCCESS] {symbol}: {len(filtered_5min)} 5min records in market hours")
                     
-                    time.sleep(1)  # Be nice to API
+                    time.sleep(1)
                     current_start = current_end
                 
                 if all_data:

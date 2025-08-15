@@ -27,3 +27,15 @@ Thumbs.db
 # IDE settings
 .vscode/
 .idea/
+
+# Local generated data & artifacts (prevent large/binary data in repo)
+artifacts/
+data_extracts/
+logs/
+artifacts/**
+data_extracts/**
+logs/**
+
+# Model outputs
+artifacts/models/
+artifacts/models/**

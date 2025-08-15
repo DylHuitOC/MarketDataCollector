@@ -9,3 +9,5 @@ aiohttp
 matplotlib
 seaborn
 plotly
+xgboost
+scikit-learn
